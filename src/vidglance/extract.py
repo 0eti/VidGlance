@@ -79,6 +79,11 @@ def plan_times(
     return FramePlan(times, warnings)
 
 
+def backend_version() -> str:
+    """-v 출력용: `PyAV 19.0.2 (FFmpeg 9.0.2)`."""
+    return f"PyAV {av.__version__} (FFmpeg {av.ffmpeg_version_info})"
+
+
 def _first_video(container: InputContainer) -> VideoStream | None:
     # 앨범 아트(attached_pic)는 건너뛴다 (probe와 같은 규칙)
     for stream in container.streams.video:
@@ -161,44 +166,3 @@ def extract_frames(
     ]
     seconds = time.perf_counter() - began
     return ExtractResult(frames, warnings, seconds, open_seconds, frame_seconds)
-
-
-if __name__ == "__main__":
-    # 임시 디버그 명령 (Phase 2): python -m vidglance.extract <파일>
-    # 4×5, 칸 너비 244px(시트 1024px 기준)로 뽑고 단계별 시간을 출력한다.
-    import sys
-
-    from vidglance import ffmpeg
-    from vidglance.probe import ProbeError, probe
-
-    sys.stdout.reconfigure(encoding="utf-8")  # type: ignore[union-attr]
-    target_path = Path(sys.argv[1]).resolve()
-    ffprobe = ffmpeg.find_tool("ffprobe")
-    print(f"ffprobe: {ffprobe}\n         {ffmpeg.version(ffprobe)}")
-    print(f"PyAV {av.__version__} (FFmpeg {av.ffmpeg_version_info})")
-
-    began = time.perf_counter()
-    try:
-        info = probe(target_path, ffprobe)
-    except ProbeError as e:
-        print(f"실패: {e}")
-        sys.exit(1)
-    probe_seconds = time.perf_counter() - began
-
-    plan = plan_times(info.duration, 20)
-    cell = (244, max(1, round(244 / info.aspect)))
-    result = extract_frames(target_path, plan.times, cell)
-    total = time.perf_counter() - began
-
-    print(
-        f"영상: {info.file_name}  {format_duration(info.duration)}  {cell[0]}x{cell[1]}"
-    )
-    print(f"probe   {probe_seconds:6.2f}s")
-    print(
-        f"추출    {result.seconds:6.2f}s  (열기 {result.open_seconds:.2f}s, "
-        f"프레임당 평균 {sum(result.frame_seconds) / len(result.frame_seconds):.2f}s, "
-        f"최대 {max(result.frame_seconds):.2f}s)"
-    )
-    print(f"합계    {total:6.2f}s")
-    for warning in plan.warnings + result.warnings:
-        print(f"경고: {warning}")
