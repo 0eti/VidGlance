@@ -148,29 +148,11 @@ def probe(path: Path, ffprobe: Path) -> VideoInfo:
     if result.returncode != 0:
         lines = ffmpeg.decode(result.stderr).strip().splitlines()
         reason = lines[-1] if lines else f"종료 코드 {result.returncode}"
+        # ffprobe는 "{경로}: 이유" 형태로 쓴다. 파일 이름은 진행 표시에 이미 있으므로 뗀다
+        reason = reason.removeprefix(f"{path}: ")
         raise ProbeError(f"영상을 읽을 수 없음: {reason}")
     try:
         data = json.loads(ffmpeg.decode(result.stdout))
     except json.JSONDecodeError as e:
         raise ProbeError(f"ffprobe 출력을 해석할 수 없음: {e}") from e
     return parse(path, path.stat().st_size, data)
-
-
-if __name__ == "__main__":
-    # 임시 디버그 명령 (Phase 1): python -m vidglance.probe <파일> [en|ko]
-    import sys
-
-    from vidglance.config import HeaderSettings
-    from vidglance.formatting import header_lines
-
-    sys.stdout.reconfigure(encoding="utf-8")  # type: ignore[union-attr]
-    target = Path(sys.argv[1]).resolve()
-    lang = "ko" if sys.argv[2:] == ["ko"] else "en"
-    try:
-        info = probe(target, ffmpeg.find_tool("ffprobe"))
-    except (ProbeError, ffmpeg.FFmpegNotFoundError) as e:
-        print(f"실패: {e}")
-        sys.exit(1)
-    print(info)
-    print()
-    print("\n".join(header_lines(info, HeaderSettings(), lang)))
