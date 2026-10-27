@@ -188,8 +188,6 @@ uv run python build/build.py            # exe 빌드 → dist/VidGlance.exe(onef
 
 빌드는 처음 한 번 Gyan.dev에서 ffmpeg essentials 빌드(약 115MB)를 받아 SHA-256을 확인하고, 그 안의 `ffprobe.exe`만 꺼내 넣습니다. 받은 버전은 `build/ffmpeg_version.txt`에 기록됩니다.
 
-설계 문서: [Intent.md](Intent.md) (목적·범위) · [spec.md](spec.md) (동작 기준) · [plan.md](plan.md) (진행 순서·결정 기록)
-
 ## 라이선스와 고지
 
 VidGlance 자체의 라이선스는 아직 정하지 않았습니다.

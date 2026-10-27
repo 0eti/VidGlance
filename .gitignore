@@ -12,3 +12,9 @@ docs/*.mp4
 docs/reference*.jpg
 build/work/
 *.exe
+
+# 개인 작업 문서 (저장소에 올리지 않음)
+CLAUDE.md
+Intent.md
+plan.md
+spec.md

@@ -7,7 +7,7 @@ from vidglance import formatting as fmt
 from vidglance.config import HeaderSettings
 from vidglance.probe import VideoInfo
 
-# 레퍼런스 시트의 영상 (Intent.md)
+# 레퍼런스 시트 헤더에 나온 예시 값
 REFERENCE = VideoInfo(
     path=Path("예시영상.mp4"),
     file_name="예시영상.mp4",
