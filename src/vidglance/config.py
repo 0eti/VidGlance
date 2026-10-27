@@ -7,6 +7,8 @@ from dataclasses import dataclass
 from typing import Literal
 
 Language = Literal["en", "ko"]
+ThemeName = Literal["light", "dark"]
+OutputFormat = Literal["webp", "jpg", "png"]
 
 
 @dataclass(frozen=True)
