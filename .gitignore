@@ -8,3 +8,5 @@ dist/
 build/ffmpeg/
 *_sheet.*
 config.json
+docs/*.mp4
+docs/reference*.jpg
