@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 from PIL import Image
 
-from vidglance import __version__, ffmpeg
+from vidglance import __version__, app, batch, ffmpeg
 from vidglance.app import EXIT_FAILED, EXIT_OK, EXIT_SETUP, main
 
 
@@ -211,3 +211,120 @@ def test_nothing_to_process(
     empty.mkdir()
     assert _run(workspace, str(empty)) == EXIT_OK
     assert "처리할 영상이 없습니다" in capsys.readouterr().out
+
+
+# --- 창 대기 (spec §2.4) ---
+
+
+@pytest.fixture
+def waits(monkeypatch: pytest.MonkeyPatch) -> list[str]:
+    """키 대기·카운트다운 호출을 기록한다 (실제로 기다리지 않는다)."""
+    calls: list[str] = []
+    monkeypatch.setattr(app, "_wait_key", lambda *a: calls.append("key"))
+    monkeypatch.setattr(app, "_countdown", lambda s: calls.append(f"countdown {s}"))
+    return calls
+
+
+@pytest.mark.parametrize(
+    ("pause", "ok", "delay", "expected"),
+    [
+        (False, False, 3, []),  # 터미널 실행 / --no-pause
+        (True, True, 3, ["countdown 3"]),  # 모두 성공 → 카운트다운
+        (True, True, 0, []),  # 0이면 바로 닫힘
+        (True, True, -1, ["key"]),  # 음수면 항상 키 대기
+        (True, False, 3, ["key"]),  # 실패가 있으면 키 대기
+    ],
+)
+def test_finish_rules(
+    waits: list[str], pause: bool, ok: bool, delay: int, expected: list[str]
+) -> None:
+    app._finish(pause, ok, delay)
+    assert waits == expected
+
+
+def test_drag_and_drop_window_counts_down(
+    workspace: dict[str, Path], waits: list[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(app, "owns_console", lambda: True)  # 새로 열린 창
+    ws = workspace
+    assert main(["--config", str(ws["config"]), str(ws["a"])]) == EXIT_OK
+    assert waits == ["countdown 3"]
+
+
+def test_drag_and_drop_config_error_waits_for_key(
+    workspace: dict[str, Path], waits: list[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(app, "owns_console", lambda: True)
+    ws = workspace
+    ws["config"].parent.mkdir(parents=True)
+    ws["config"].write_text("{", encoding="utf-8")
+    assert main(["--config", str(ws["config"]), str(ws["a"])]) == EXIT_SETUP
+    assert waits == ["key"]
+
+
+def test_terminal_does_not_wait(workspace: dict[str, Path], waits: list[str]) -> None:
+    # pytest는 터미널(다른 프로세스와 같은 콘솔)이나 파이프에서 돈다 → 기다리지 않는다
+    assert app.owns_console() is False
+    ws = workspace
+    assert main(["--config", str(ws["config"]), str(ws["a"])]) == EXIT_OK
+    assert waits == []
+
+
+# --- 중단·예기치 않은 오류 ---
+
+
+def test_interrupt_stops_batch(
+    workspace: dict[str, Path],
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    ws = workspace
+    real = batch.process_video
+    calls: list[Path] = []
+
+    def interrupt_second(video: Path, ctx: batch.Context) -> batch.Result:
+        calls.append(video)
+        if len(calls) == 2:
+            raise KeyboardInterrupt  # Ctrl+C·창 닫기(SIGBREAK)
+        return real(video, ctx)
+
+    monkeypatch.setattr(app, "process_video", interrupt_second)
+    code = _run(ws, str(ws["a"]), str(ws["b"]), str(ws["folder"]))
+    out = capsys.readouterr().out
+
+    assert code == EXIT_FAILED
+    assert len(calls) == 2  # 나머지는 처리하지 않는다
+    assert "… 중단" in out
+    assert out.strip().endswith("— 중단됨")
+    leftovers = [p for p in ws["a"].parent.parent.rglob("*.tmp")]
+    assert leftovers == []
+
+
+def test_unexpected_error_does_not_stop_batch(
+    workspace: dict[str, Path],
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    ws = workspace
+    real = batch.process_video
+
+    def broken_for_b(video: Path, ctx: batch.Context) -> batch.Result:
+        if video == ws["b"]:
+            raise RuntimeError("뜻밖의 문제")
+        return real(video, ctx)
+
+    monkeypatch.setattr(app, "process_video", broken_for_b)
+    code = _run(ws, str(ws["a"]), str(ws["b"]))
+    out = capsys.readouterr().out
+
+    assert code == EXIT_FAILED
+    assert "실패: 예기치 않은 오류: RuntimeError('뜻밖의 문제')" in out
+    assert _sheet(ws["a"]).is_file()
+    assert "완료 1, 건너뜀 0, 실패 1" in out
+
+
+def test_backend_version_in_verbose() -> None:
+    from vidglance.extract import backend_version
+
+    assert backend_version().startswith("PyAV ")
+    assert "(FFmpeg " in backend_version()

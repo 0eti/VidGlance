@@ -169,3 +169,20 @@ def test_save_replaces_existing(tmp_path: Path) -> None:
     save_sheet(Image.new("RGB", (4, 4)), out, "png", 85)
     with Image.open(out) as saved:
         assert saved.size == (4, 4)
+
+
+def test_save_interrupted_leaves_no_temp(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """저장 중 Ctrl+C·창 닫기(KeyboardInterrupt)여도 임시 파일을 지운다."""
+
+    def interrupted_save(
+        self: Image.Image, fp: object, *args: object, **kw: object
+    ) -> None:
+        Path(str(fp)).write_bytes(b"partial")
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(Image.Image, "save", interrupted_save)
+    with pytest.raises(KeyboardInterrupt):
+        save_sheet(Image.new("RGB", (8, 8)), tmp_path / "a_sheet.webp", "webp", 85)
+    assert list(tmp_path.iterdir()) == []
