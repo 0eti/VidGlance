@@ -134,3 +134,43 @@ def extract_frames(
         if f.image is None
     ]
     return ExtractResult(frames, warnings, seconds, [s for _, s in results])
+
+
+if __name__ == "__main__":
+    # 임시 디버그 명령 (Phase 2): python -m vidglance.extract <파일> [jobs]
+    # 4×5, 칸 너비 244px(시트 1024px 기준)로 뽑고 단계별 시간을 출력한다.
+    import sys
+
+    from vidglance.probe import ProbeError, probe
+
+    sys.stdout.reconfigure(encoding="utf-8")  # type: ignore[union-attr]
+    target = Path(sys.argv[1]).resolve()
+    jobs = int(sys.argv[2]) if len(sys.argv) > 2 else 0
+    tools = ffmpeg.find_tools()
+    print(f"ffmpeg: {tools.ffmpeg}\n        {ffmpeg.version(tools.ffmpeg)}")
+
+    began = time.perf_counter()
+    try:
+        info = probe(target, tools.ffprobe)
+    except ProbeError as e:
+        print(f"실패: {e}")
+        sys.exit(1)
+    probe_seconds = time.perf_counter() - began
+
+    plan = plan_times(info.duration, 20)
+    size = (244, max(1, round(244 / info.aspect)))
+    result = extract_frames(tools.ffmpeg, target, plan.times, size, jobs)
+    total = time.perf_counter() - began
+
+    print(
+        f"영상: {info.file_name}  {format_duration(info.duration)}  {size[0]}x{size[1]}"
+    )
+    print(f"probe   {probe_seconds:6.2f}s")
+    print(
+        f"추출    {result.seconds:6.2f}s  (jobs={jobs or default_jobs()}, "
+        f"프레임당 평균 {sum(result.frame_seconds) / len(result.frame_seconds):.2f}s, "
+        f"최대 {max(result.frame_seconds):.2f}s)"
+    )
+    print(f"합계    {total:6.2f}s")
+    for warning in plan.warnings + result.warnings:
+        print(f"경고: {warning}")
