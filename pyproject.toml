@@ -1,0 +1,34 @@
+[project]
+name = "vidglance"
+dynamic = ["version"]
+description = "영상을 끌어다 놓으면 정보 헤더 + 프레임 격자 썸네일 시트를 만드는 Windows 도구"
+requires-python = ">=3.12"
+dependencies = [
+    "pillow>=11",
+]
+
+[project.scripts]
+vidglance = "vidglance.app:main"
+
+[dependency-groups]
+dev = [
+    "pytest>=8",
+    "ruff>=0.8",
+    "pyinstaller>=6",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.version]
+path = "src/vidglance/__init__.py"
+
+[tool.ruff]
+target-version = "py312"
+
+[tool.ruff.lint]
+extend-select = ["I"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
