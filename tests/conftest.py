@@ -47,6 +47,17 @@ _RECIPES: dict[str, list[str]] = {
         *_X264,
         *_AAC,
     ],
+    # 방송 녹화형: 인덱스(sidx·mfra) 없이 1초마다 moof 조각이 이어지는 MP4
+    "조각난.mp4": [
+        *_video("640x360", 30, 30),
+        *_audio(30),
+        *_X264,
+        "-g",
+        "30",
+        *_AAC,
+        "-movflags",
+        "frag_keyframe+empty_moov+default_base_moof",
+    ],
     # 640x480 저장, SAR 4:3 → 표시 비율 16:9
     "애너모픽.mp4": [
         *_video("640x480", 25, 10),
