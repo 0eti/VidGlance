@@ -12,7 +12,10 @@ a = Analysis(  # noqa: F821
     pathex=[str(ROOT / "src")],
     # 실행 시 sys._MEIPASS 아래 경로 = paths.py가 찾는 경로
     binaries=[(str(ROOT / "build" / "ffmpeg" / "ffprobe.exe"), "ffmpeg")],
-    datas=[(str(ROOT / "assets" / "fonts"), "assets/fonts")],
+    datas=[
+        (str(ROOT / "assets" / "fonts"), "assets/fonts"),
+        (str(ROOT / "build" / "ffmpeg" / "LICENSE"), "ffmpeg"),  # ffprobe GPL 원문
+    ],
     excludes=["tkinter", "unittest", "pydoc", "numpy"],
 )
 pyz = PYZ(a.pure)  # noqa: F821
