@@ -11,3 +11,4 @@ config.json
 docs/*.mp4
 docs/reference*.jpg
 build/work/
+*.exe
