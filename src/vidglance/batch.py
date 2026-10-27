@@ -159,7 +159,7 @@ def process_video(video: Path, ctx: Context) -> Result:
         info.duration, len(layout.cells), s.skip_start_seconds, s.skip_end_seconds
     )
     extracted = extract_frames(
-        video, plan.times, (layout.cell_width, layout.cell_height)
+        video, plan.times, (layout.cell_width, layout.cell_height), s.seek_mode
     )
     timings["extract"] = time.perf_counter() - step
     warnings += plan.warnings + extracted.warnings

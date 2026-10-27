@@ -59,6 +59,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--overwrite", action="store_true", default=None)
     p.add_argument("--no-timestamp", action="store_true")
     p.add_argument("--font", metavar="PATH")
+    p.add_argument("--seek", choices=["fast", "accurate"], help="프레임 고르는 방식")
     p.add_argument("--ffmpeg-dir", metavar="DIR")
     p.add_argument("--config", metavar="PATH", help="설정 파일 직접 지정")
     p.add_argument("--no-pause", action="store_true", help="끝나고 기다리지 않음")
@@ -83,6 +84,7 @@ def _overrides(args: argparse.Namespace) -> dict[str, Any]:
         "quality": args.quality,
         "overwrite": args.overwrite,
         "font": args.font,
+        "seek_mode": args.seek,
         "ffmpeg_dir": args.ffmpeg_dir,
     }
     if args.grid:

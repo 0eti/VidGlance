@@ -100,9 +100,11 @@ def _mean_diff(a: Image.Image, b: Image.Image) -> float:
 
 def test_extract_20_frames(media: Callable[[str], Path]) -> None:
     times = plan_times(60, 20).times
-    result = extract_frames(media("기본_1080p30.mp4"), times, (240, 135))
+    result = extract_frames(media("기본_1080p30.mp4"), times, (240, 135), "accurate")
 
-    assert [f.time for f in result.frames] == times
+    # 칸 시각은 실제로 뽑은 프레임 시각: 요청 시각 이상, 1프레임(1/30초) 안
+    for requested, frame in zip(times, result.frames, strict=True):
+        assert requested - 1e-3 <= frame.time <= requested + 1 / 30 + 1e-3
     assert all(
         f.image is not None and f.image.size == (240, 135) for f in result.frames
     )
@@ -133,7 +135,7 @@ def test_extract_matches_ffmpeg_decode(
 ) -> None:
     """seek 후 디코딩한 프레임이 ffmpeg가 처음부터 디코딩한 같은 시점 프레임과 같다."""
     video = media(name)
-    image = extract_frames(video, [t], size).frames[0].image
+    image = extract_frames(video, [t], size, "accurate").frames[0].image
     assert image is not None and image.size == size
     reference = _reference(ffmpeg_path, video, t, size, tmp_path / "ref.png")
     assert _mean_diff(image, reference) < SAME_FRAME
@@ -173,7 +175,7 @@ def test_extract_retry_one_second_earlier(
 ) -> None:
     # 10초 영상의 10.5초 → 실패, 1초 앞(9.5초) 재시도 결과가 들어간다
     video = media("무음.mp4")
-    result = extract_frames(video, [10.5], (160, 120))
+    result = extract_frames(video, [10.5], (160, 120), "accurate")
     image = result.frames[0].image
     assert image is not None
     assert result.warnings == []
@@ -191,3 +193,66 @@ def test_extract_broken_file(media: Callable[[str], Path]) -> None:
 def test_extract_special_path(media: Callable[[str], Path]) -> None:
     result = extract_frames(media("공백 과 특수문자 (1)&.mp4"), [2], (160, 120))
     assert result.frames[0].image is not None
+
+
+# --- fast 모드 (spec §7: 가장 가까운 키프레임) ---
+
+
+def test_fast_uses_nearest_keyframe(
+    media: Callable[[str], Path], ffmpeg_path: Path, tmp_path: Path
+) -> None:
+    """키프레임 1초 간격 → 요청 시각에서 0.5초 안의 키프레임을 쓰고, 칸 시각 = 실제 그림."""
+    video = media("조각난.mp4")
+    times = plan_times(30, 20).times
+    result = extract_frames(video, times, (320, 180), "fast")
+
+    for requested, frame in zip(times, result.frames, strict=True):
+        assert frame.image is not None
+        assert abs(frame.time - requested) <= 0.5 + 1e-6
+        # 키프레임(-g 30, 30fps)은 1초마다, n + 0.023초에 있다
+        assert frame.time % 1 == pytest.approx(0.023, abs=0.01)
+    # 타임스탬프로 표시할 시각의 그림이 맞는지 (ffmpeg로 그 시각을 정확히 디코딩해 비교)
+    middle = result.frames[10]
+    reference = _reference(
+        ffmpeg_path, video, middle.time, (320, 180), tmp_path / "r.png"
+    )
+    assert middle.image is not None
+    assert _mean_diff(middle.image, reference) < SAME_FRAME
+
+
+def test_fast_decodes_far_fewer_frames(
+    media: Callable[[str], Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """회귀: 키프레임 간격이 긴 영상에서 정확한 시점까지 디코딩하느라 느려지지 않는다."""
+    counts = {"fast": 0, "accurate": 0}
+    real_decode = extract.InputContainer.decode
+    current = {"mode": "fast"}
+
+    def counting_decode(self: Any, *args: Any, **kwargs: Any) -> Any:
+        for frame in real_decode(self, *args, **kwargs):
+            counts[current["mode"]] += 1
+            yield frame
+
+    monkeypatch.setattr(extract.InputContainer, "decode", counting_decode)
+    # 60초, 4칸 → 칸 간격 12초 > 키프레임 간격 8.3초 (x264 기본 250프레임) → 모두 키프레임 사용
+    times = plan_times(60, 4).times
+    for mode in ("fast", "accurate"):
+        current["mode"] = mode
+        extract_frames(media("기본_1080p30.mp4"), times, (160, 90), mode)  # type: ignore[arg-type]
+    # 키프레임 2개(앞·뒤)씩만 디코딩한다
+    assert counts["fast"] <= 2 * len(times)
+    assert counts["accurate"] > 10 * counts["fast"]
+
+
+def test_fast_falls_back_when_keyframes_are_sparse(
+    media: Callable[[str], Path],
+) -> None:
+    """키프레임이 0초뿐인 10초 영상: 칸 간격 절반보다 멀면 정확하게 → 겹침·순서 뒤바뀜 없음."""
+    times = plan_times(10, 20).times
+    result = extract_frames(media("무음.mp4"), times, (160, 120), "fast")
+    got = [f.time for f in result.frames]
+    assert all(f.image is not None for f in result.frames)
+    assert got == sorted(got)
+    assert len(set(got)) == len(got)
+    half = (times[1] - times[0]) / 2
+    assert all(abs(g - t) <= half for g, t in zip(got, times, strict=True))

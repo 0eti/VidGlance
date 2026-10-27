@@ -15,6 +15,7 @@ from av.video.frame import VideoFrame
 from av.video.stream import VideoStream
 from PIL import Image
 
+from vidglance.config import SeekMode
 from vidglance.formatting import format_duration
 
 # 칸 사이 최소 간격(초). 이보다 촘촘하면 "매우 짧은 영상"으로 본다.
@@ -39,7 +40,10 @@ class FramePlan:
 
 @dataclass(frozen=True)
 class Frame:
-    """칸 하나의 결과. image가 None이면 추출 실패(회색 칸)."""
+    """칸 하나의 결과. image가 None이면 추출 실패(회색 칸).
+
+    time은 실제로 뽑은 프레임의 시각(초, 파일 시작 기준). 실패하면 요청 시각.
+    """
 
     time: float
     image: Image.Image | None
@@ -107,28 +111,77 @@ def _to_image(frame: VideoFrame, size: tuple[int, int]) -> Image.Image:
     return image
 
 
+def _keyframe(
+    container: InputContainer, stream: VideoStream, target: float, backward: bool
+) -> VideoFrame | None:
+    """target 직전(backward) 또는 직후 키프레임으로 seek해 첫 프레임 하나만 디코딩한다.
+
+    그 방향에 키프레임이 없으면(마지막 키프레임 뒤에서 직후를 찾는 등) None.
+    """
+    try:
+        container.seek(int(target / stream.time_base), stream=stream, backward=backward)
+        for frame in container.decode(stream):
+            if frame.time is not None:
+                return frame
+    except av.FFmpegError:  # 직후 키프레임이 없으면 seek이 EPERM을 낸다
+        return None
+    return None
+
+
+def _accurate(
+    container: InputContainer, stream: VideoStream, target: float
+) -> VideoFrame | None:
+    """target 이전 키프레임부터 디코딩해 target 이상인 첫 프레임 (ffmpeg 입력 seek과 같음)."""
+    container.seek(int(target / stream.time_base), stream=stream, backward=True)
+    for frame in container.decode(stream):
+        if frame.time is not None and frame.time >= target - _EPSILON:
+            return frame
+    return None  # target 이후 프레임이 없음 (끝을 넘음)
+
+
+def _nearest_keyframe(
+    container: InputContainer, stream: VideoStream, target: float
+) -> VideoFrame | None:
+    """target 앞뒤 키프레임 중 더 가까운 쪽 (디코딩은 2프레임뿐)."""
+    found = [
+        f
+        for f in (
+            _keyframe(container, stream, target, backward=True),
+            _keyframe(container, stream, target, backward=False),
+        )
+        if f is not None
+    ]
+    return min(found, key=lambda f: abs(f.time - target)) if found else None
+
+
 def _grab(
     container: InputContainer,
     stream: VideoStream,
     target: float,
-    size: tuple[int, int],
-) -> Image.Image | None:
-    """target초(절대 시각) 이전 키프레임으로 seek한 뒤 target 이상인 첫 프레임을 돌려준다."""
+    mode: SeekMode,
+    tolerance: float,
+) -> VideoFrame | None:
+    """seek_mode에 맞게 target(절대 시각)의 프레임을 고른다. 실패하면 None.
+
+    fast: 가장 가까운 키프레임이 tolerance(칸 간격의 절반) 안이면 그것을 쓴다.
+    더 멀면(키프레임 간격 > 칸 간격인 짧은 영상) 이웃 칸과 겹치지 않게 정확하게 뽑는다.
+    """
     try:
-        container.seek(int(target / stream.time_base), stream=stream, backward=True)
-        for frame in container.decode(stream):
-            if frame.time is not None and frame.time >= target - _EPSILON:
-                return _to_image(frame, size)
+        if mode == "fast":
+            frame = _nearest_keyframe(container, stream, target)
+            if frame is not None and abs(frame.time - target) <= tolerance:
+                return frame
+        return _accurate(container, stream, target)
     except av.FFmpegError:
         return None
-    return None  # target 이후 프레임이 없음 (끝을 넘음)
 
 
 def extract_frames(
-    video: Path, times: list[float], size: tuple[int, int]
+    video: Path, times: list[float], size: tuple[int, int], mode: SeekMode = "fast"
 ) -> ExtractResult:
-    """파일을 한 번 열고 시점마다 seek해 칸 크기 프레임을 뽑는다.
+    """파일을 한 번 열고 시점마다 seek해 칸 크기 프레임을 뽑는다 (spec §7).
 
+    Frame.time은 실제로 뽑은 프레임의 시각이다 (accurate면 요청 시각과 1프레임 안).
     실패한 시점은 1초 앞에서 한 번 더 시도하고, 그래도 실패하면 image=None.
     """
     began = time.perf_counter()
@@ -149,14 +202,20 @@ def extract_frames(
             stream.thread_type = "AUTO"
         # ffmpeg의 입력 seek처럼 파일 시작 시각 기준으로 맞춘다
         start = container.start_time / av.time_base if container.start_time else 0.0
+        # fast 모드 허용 오차: 칸 간격의 절반 (칸이 하나면 정확하게)
+        tolerance = (times[1] - times[0]) / 2 if len(times) > 1 else 0.0
         for t in times:
             frame_began = time.perf_counter()
-            image = None
+            frame = None
             if stream is not None:
-                image = _grab(container, stream, start + t, size)
-                if image is None:
-                    image = _grab(container, stream, start + max(0.0, t - 1), size)
-            frames.append(Frame(t, image))
+                frame = _grab(container, stream, start + t, mode, tolerance)
+                if frame is None:
+                    retry = start + max(0.0, t - 1)
+                    frame = _grab(container, stream, retry, mode, tolerance)
+            if frame is None:
+                frames.append(Frame(t, None))
+            else:
+                frames.append(Frame(frame.time - start, _to_image(frame, size)))
             frame_seconds.append(time.perf_counter() - frame_began)
 
     warnings = [

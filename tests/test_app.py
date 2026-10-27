@@ -328,3 +328,13 @@ def test_backend_version_in_verbose() -> None:
 
     assert backend_version().startswith("PyAV ")
     assert "(FFmpeg " in backend_version()
+
+
+def test_seek_option(workspace: dict[str, Path]) -> None:
+    ws = workspace
+    assert _run(ws, "--seek", "accurate", str(ws["a"])) == EXIT_OK
+    assert _sheet(ws["a"]).is_file()
+    # 명령줄 값은 이번 실행에만 쓰고, 설정 파일에는 기본값(fast)이 들어간다
+    assert json.loads(ws["config"].read_text(encoding="utf-8"))["seek_mode"] == "fast"
+    with pytest.raises(SystemExit):
+        _run(ws, "--seek", "slow", str(ws["a"]))

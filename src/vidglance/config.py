@@ -15,6 +15,7 @@ from vidglance import paths
 Language = Literal["en", "ko"]
 ThemeName = Literal["light", "dark"]
 OutputFormat = Literal["webp", "jpg", "png"]
+SeekMode = Literal["fast", "accurate"]
 
 CONFIG_NAME = "config.json"
 CONFIG_VERSION = 1
@@ -59,6 +60,7 @@ class Settings:
     recursive: bool = False
     skip_start_seconds: float = 0
     skip_end_seconds: float = 0
+    seek_mode: SeekMode = "fast"
     font: str = ""
     ffmpeg_dir: str = ""
     close_delay_seconds: int = 3
@@ -141,6 +143,7 @@ _VALIDATORS: dict[str, Validator] = {
     "recursive": _bool,
     "skip_start_seconds": _non_negative,
     "skip_end_seconds": _non_negative,
+    "seek_mode": _choice("fast", "accurate"),
     "font": _str,
     "ffmpeg_dir": _str,
     "close_delay_seconds": _int,

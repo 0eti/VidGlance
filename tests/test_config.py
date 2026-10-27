@@ -41,7 +41,7 @@ def test_default_file_matches_spec(tmp_path: Path) -> None:
     assert list(data) == [
         "config_version", "columns", "rows", "width", "gap", "theme", "language",
         "header", "format", "quality", "suffix", "output_dir", "overwrite",
-        "show_timestamp", "recursive", "skip_start_seconds", "skip_end_seconds",
+        "show_timestamp", "recursive", "skip_start_seconds", "skip_end_seconds", "seek_mode",
         "font", "ffmpeg_dir", "close_delay_seconds",
     ]  # fmt: skip
     assert data["width"] == 1024 and data["quality"] == 85 and data["gap"] == 8
@@ -127,6 +127,7 @@ def test_unknown_header_key_warns(tmp_path: Path) -> None:
         ({"overwrite": 1}, "overwrite: true 또는 false여야 합니다"),
         ({"skip_start_seconds": -1}, "skip_start_seconds: 0 이상의 숫자여야 합니다"),
         ({"close_delay_seconds": 1.5}, "close_delay_seconds: 정수여야 합니다"),
+        ({"seek_mode": "slow"}, 'seek_mode: "fast" / "accurate" 중 하나여야 합니다'),
         ({"header": {"fps": "yes"}}, "header.fps: true 또는 false여야 합니다"),
         ({"header": []}, "header: {"),
     ],
