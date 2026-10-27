@@ -75,6 +75,7 @@ VidGlance 0.1.0  |  설정: D:\Tools\VidGlance\config.json  |  4x5, 1024px, webp
   "recursive": false,
   "skip_start_seconds": 0,
   "skip_end_seconds": 0,
+  "seek_mode": "fast",
   "font": "",
   "ffmpeg_dir": "",
   "close_delay_seconds": 3
@@ -97,6 +98,7 @@ VidGlance 0.1.0  |  설정: D:\Tools\VidGlance\config.json  |  4x5, 1024px, webp
 | `show_timestamp` | 칸마다 타임스탬프를 그릴지 | `true` / `false` |
 | `recursive` | 폴더를 놓았을 때 하위 폴더까지 처리할지 | `true` / `false` |
 | `skip_start_seconds`, `skip_end_seconds` | 앞·뒤에서 뺄 구간(초). 인트로·엔딩 건너뛰기 | 0 이상 |
+| `seek_mode` | 프레임 고르는 방식. `fast`는 균등 시점에서 가장 가까운 키프레임을 써서 빠르고(시점 오차 보통 1~3초), `accurate`는 정확한 시점까지 디코딩해서 느립니다. 타임스탬프는 항상 실제 장면의 시각입니다 | `"fast"` / `"accurate"` |
 | `font` | 글꼴 파일 경로. 비우면 맑은 고딕 → 내장 Pretendard | 경로 |
 | `ffmpeg_dir` | `ffprobe.exe`가 있는 폴더. 비우면 자동으로 찾음([ffprobe 교체](#ffprobe-교체)) | 경로 |
 | `close_delay_seconds` | 모두 성공했을 때 창이 닫히기까지 기다릴 초. 0이면 바로, 음수면 항상 키 대기 | 정수 |
@@ -131,6 +133,7 @@ VidGlance.exe [옵션] <파일 또는 폴더...>
       --overwrite
       --no-timestamp
       --font PATH
+      --seek MODE        fast | accurate
       --ffmpeg-dir DIR
       --config PATH      설정 파일 직접 지정
       --no-pause         끝나고 기다리지 않음
@@ -166,6 +169,7 @@ PyAV 19.0.2 (FFmpeg 9.0.2)
 
 | 증상 | 확인할 것 |
 |---|---|
+| 4K·AV1 영상이 느리다 | `seek_mode`가 `"accurate"`인지 확인합니다. 기본값 `"fast"`는 4K AV1 영상 1개를 약 2초에 처리합니다(`accurate`는 약 11초) |
 | 시작이 5초쯤 걸린다 | 파일 하나(onefile) 형태라서 그렇습니다. 폴더(onedir) 형태를 쓰면 0.4초입니다 |
 | "건너뜀 (이미 있음)" | 시트가 이미 있습니다. 지우거나 `overwrite`를 `true`로 |
 | "건너뜀 (영상 아님)" | 영상이 아닌 파일(문서, 사진 등)을 직접 끌어다 놓았습니다 |
