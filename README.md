@@ -194,9 +194,9 @@ uv run python build/build.py            # exe 빌드 → dist/VidGlance.exe(onef
 
 ## 라이선스와 고지
 
-VidGlance 자체의 라이선스는 아직 정하지 않았습니다.
+VidGlance의 소스 코드는 [MIT 라이선스](LICENSE)입니다.
 
-배포하는 exe에는 아래 프로그램과 라이브러리가 함께 들어 있습니다.
+배포하는 exe에는 아래 프로그램과 라이브러리가 함께 들어 있고, 각각 자기 라이선스를 따릅니다.
 
 | 구성 요소 | 버전 | 라이선스 | 출처 |
 |---|---|---|---|

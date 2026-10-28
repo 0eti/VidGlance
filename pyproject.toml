@@ -3,6 +3,7 @@ name = "vidglance"
 dynamic = ["version"]
 description = "영상을 끌어다 놓으면 정보 헤더 + 프레임 격자 썸네일 시트를 만드는 Windows 도구"
 readme = "README.md"
+license = "MIT"
 requires-python = ">=3.12"
 dependencies = [
     "av>=19",
